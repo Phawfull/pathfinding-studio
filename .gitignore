@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+presentation/
+presentation_build/
+report_build/
+reports/
+*.pdf
+*.docx
+*.pptx
+*.zip
