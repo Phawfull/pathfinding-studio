@@ -1,94 +1,67 @@
 # Pathfinding Studio
 
-A standalone Tkinter desktop project for visualizing BFS, DFS, Dijkstra and A*.
+A simple Tkinter application that generates random mazes and visualizes BFS,
+DFS, Dijkstra and A*.
 
-## Run on Windows
+## Run
 
-Double-click **run.bat** in this folder, or open a terminal here and run:
+Double-click **run.bat**, or run:
 
 ```powershell
 python main.py
 ```
 
-Requires Python **3.10 or newer** with Tkinter. No pip installation, server or database is needed.
-If Tkinter is missing, modify the Python installation and enable Tcl/Tk support.
+Requires Python 3.10+ with Tkinter. No pip packages, server or database required.
 
-## Features and controls
+## Controls
 
-| Action | Control |
-| --- | --- |
-| Paint obstacles | Wall tool, left-click and drag |
-| Paint costly terrain | Weight tool, or hold W while drawing; entry cost 5 |
-| Remove walls/weights | Erase tool, or right-click and drag |
-| Move start | Start tool, or Shift-click |
-| Move destination | End tool, or Ctrl-click |
-| Animate search / resume | Run / Resume |
-| Freeze animation | Pause |
-| Expand one node | Step |
-| Stop and remove search colors | Clear Path |
-| Remove walls and weights | Clear All; keeps endpoints |
-| Generate connected labyrinth | Random Maze |
-| Compare four searches | Compare All |
-| Save / load layout | Save / Load JSON |
+1. Click **Random Maze** to generate a connected maze. A maze also appears at startup.
+2. Choose **BFS**, **DFS**, **Dijkstra** or **A*** from the algorithm dropdown.
+3. Click **Run** to watch the search at a fixed 20 ms per expansion.
 
-The algorithm selector locks during an active search. Editing also locks while
-running, paused or comparing: press Clear Path to cancel first. Clear All,
-Random Maze and a successful Load cancel any active search. Saving is safe during
-a search because only the underlying layout is saved.
+Choose another algorithm to clear the search colors and run it on the same maze.
+Changing the algorithm or generating a maze cancels the current animation safely.
+Run is disabled while a search is active. The canvas is read-only, and the start
+and end positions are fixed. There are no editing tools, Save/Load, speed slider,
+Pause, Step or comparison window.
 
-Green = start, red = end, dark = wall, purple = weighted terrain, yellow = frontier,
-blue = visited, orange = final route. Weighted cells retain their numeric labels.
+Green = start, red = end, dark = wall, yellow = frontier, blue = expanded,
+orange = final route. The statistics show expanded cells, route moves and search
+computation time (excluding animation and rendering).
 
 ## Algorithms
 
-All moves are horizontal or vertical; diagonal movement is not allowed.
-Entering an ordinary cell costs 1. Weighted terrain costs 5 when painted; imported
-JSON can specify positive integer costs up to 99. The starting cell costs nothing.
+Movement is horizontal or vertical. Every move costs one.
 
-| Algorithm | Structure | Weight handling | Guarantee |
-| --- | --- | --- | --- |
-| BFS | deque / FIFO | Ignores weights while searching | Fewest moves |
-| DFS | deque / LIFO | Ignores weights while searching | Reachability, not optimality |
-| Dijkstra | heapq priority queue | Uses entry cost | Minimum total cost |
-| A* | heapq; g + Manhattan heuristic | Uses entry cost | Minimum total cost |
+| Algorithm | Data structure | Behavior |
+| --- | --- | --- |
+| BFS | FIFO deque | Finds a shortest route |
+| DFS | LIFO deque | Finds a route; shortest route is not guaranteed |
+| Dijkstra | Priority queue ordered by distance | Finds a shortest route |
+| A* | Priority queue ordered by distance + Manhattan estimate | Finds a shortest route |
 
-BFS/DFS still report the actual cost of the route they find. Their reported cost
-can therefore exceed Dijkstra/A* even when their route uses fewer moves.
-Manhattan distance is admissible and consistent here because all entry costs are
-at least 1. Tie-breaking and neighbor order affect the exact path explored.
-
-Stats: Expanded counts popped/processed nodes including the destination; Moves
-counts edges in the final route; Cost sums entry costs excluding the starting cell;
-Compute measures generator work only, excluding UI rendering and animation delay.
-Comparison uses the same grid for each algorithm and runs in small event-loop batches.
-Microsecond-scale timings vary and should not be treated as a reliable benchmark.
+On an unweighted maze, BFS, Dijkstra and A* agree on shortest route length.
+The number and order of explored cells can differ. A generated maze can also
+have only one route between the endpoints, so DFS may find that same route.
 
 ## Files
 
-| File | Responsibility |
+| File | Purpose |
 | --- | --- |
-| main.py | Entry point |
-| gui.py | Tkinter window, controls, canvas, animation and comparison |
-| grid.py | Grid model, terrain, neighbors, maze generation, validated JSON |
-| algorithms.py | Search generators, immutable events, headless solver |
-| tests/test_pathfinding.py | Correctness and persistence tests |
-| PROJECT_GUIDE.md | APP mapping, workflow, demo and viva notes |
-| run.bat | Windows launcher |
-| examples/weighted_demo.json | Ready-made comparison scenario |
+| main.py | Starts the app |
+| gui.py | Window, minimal controls and fixed-rate animation |
+| grid.py | Grid neighbors and randomized depth-first maze generation |
+| algorithms.py | Search generators and result events |
+| PROJECT_GUIDE.md | Explanation of the implementation |
+| tests/test_pathfinding.py | Algorithm and maze correctness |
+| tests/gui_smoke.py | Desktop UI verification |
 
 ## Verification
 
 ```powershell
 python -m unittest discover -v
+python -m tests.gui_smoke
 ```
 
-Tests cover open and blocked grids, weighted optimality against an independent
-relaxation algorithm, maze connectivity, file validation, generator independence
-and save/load round trips. GUI interaction is verified separately.
-
-## Useful demo
-
-Load examples/weighted_demo.json, run BFS, then Compare All. BFS takes the direct,
-expensive route; Dijkstra and A* take a longer route with lower cost. Generate a
-maze, run A*, pause it, step twice and resume. Save the maze, clear everything and
-load it again to demonstrate persistence.
+The second command briefly opens the application to verify its real controls,
+read-only canvas, animation, algorithm switching, regeneration and resizing.

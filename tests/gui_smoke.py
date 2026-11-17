@@ -1,11 +1,11 @@
 """Run explicitly: python -m tests.gui_smoke (requires a desktop with Tk)."""
+import copy
 import time
-from types import SimpleNamespace
-from unittest.mock import patch
-import tempfile
-from pathlib import Path
+from tkinter import ttk
 
-from gui import App
+from algorithms import ALGORITHMS
+from gui import App, ANIMATION_DELAY_MS
+from grid import Grid
 
 
 def main():
@@ -15,75 +15,56 @@ def main():
     app.update()
     try:
         assert len(app.rectangles) == 1000
-        # Exercise mouse drawing and endpoint movement through the actual callback.
-        def click(cell, state=0, erase=False):
-            r, c = cell
-            event = SimpleNamespace(x=app.offset_x + (c + .5) * app.cell_size,
-                                    y=app.offset_y + (r + .5) * app.cell_size, state=state)
-            app.paint(event, erase)
-
-        click((3, 3))
-        assert (3, 3) in app.grid_model.walls
-        click((3, 3), erase=True)
-        assert (3, 3) not in app.grid_model.walls
-        app.tool.set('Weight')
-        click((3, 4))
-        assert app.grid_model.weights[3, 4] == 5
-        click((0, 0), state=1)
-        assert app.grid_model.start == (0, 0)
-        click((0, 2), state=4)
-        assert app.grid_model.end == (0, 2)
-        app.step()
-        assert app.state == 'paused'
-        assert len(app.visited) == 1
-        click((4, 4))
-        assert (4, 4) not in app.grid_model.weights
-        app.run()
-        app.pause()
-        assert app.state in ('paused', 'done')
-        app.speed.set(100)
-        app.run()
-        deadline = time.monotonic() + 5
-        while app.state == 'running' and time.monotonic() < deadline:
-            app.update()
-        assert app.state == 'done'
-        assert app.grid_model.end in app.route
-        app.compare()
-        deadline = time.monotonic() + 5
-        while app.state == 'comparing' and time.monotonic() < deadline:
-            app.update()
-        assert app.state == 'idle'
-        table = next(w for w in app.compare_window.winfo_children() if w.winfo_class() == 'Treeview')
-        assert len(table.get_children()) == 4
-        app.cancel_compare()
-        with tempfile.TemporaryDirectory() as folder:
-            filename = str(Path(folder) / 'scenario.json')
-            before = app.grid_model.to_dict()
-            with patch('gui.filedialog.asksaveasfilename', return_value=filename):
-                app.save()
-            app.clear_all()
-            with patch('gui.filedialog.askopenfilename', return_value=filename):
-                app.load()
-            assert app.grid_model.to_dict() == before
-            Path(filename).write_text('{broken json', encoding='utf-8')
-            with patch('gui.filedialog.askopenfilename', return_value=filename), patch('gui.messagebox.showerror') as dialog:
-                app.load()
-                assert dialog.called
-            assert app.grid_model.to_dict() == before
+        assert app.grid_model.walls
+        assert ANIMATION_DELAY_MS == 20
+        def descendants(widget):
+            for child in widget.winfo_children():
+                yield child
+                yield from descendants(child)
+        widgets = list(descendants(app))
+        assert [w.cget('text') for w in widgets if isinstance(w, ttk.Button)] == ['Random Maze', 'Run']
+        assert not any(isinstance(w, (ttk.Scale, ttk.Radiobutton)) for w in widgets)
+        # Mouse gestures and old keyboard shortcuts must leave the model untouched.
+        before = copy.deepcopy(app.grid_model)
+        for sequence in ('<Button-1>', '<B1-Motion>', '<Button-3>', '<Shift-Button-1>', '<Control-Button-1>'):
+            app.canvas.event_generate(sequence, x=100, y=100)
+        app.update()
+        assert app.grid_model == before
+        # A short fixture keeps real event-loop animation checks fast.
+        app.grid_model = Grid(5, 5, (1, 1), (1, 2))
+        for name in ALGORITHMS:
+            app.algorithm.set(name)
+            app.selector.event_generate('<<ComboboxSelected>>')
+            app.run_button.invoke()
+            deadline = time.monotonic() + 3
+            while app.runner is not None and time.monotonic() < deadline:
+                app.update()
+                time.sleep(.002)
+            assert app.runner is None, name
+            assert app.grid_model.end in app.route, name
+            assert app.run_button.instate(['!disabled'])
+        app.grid_model = Grid()
         app.maze()
         app.run()
-        app.clear_path()
+        old_timer = app.timer
+        assert old_timer is not None
+        app.algorithm.set('BFS')
+        app.selector.event_generate('<<ComboboxSelected>>')
         app.update()
-        assert app.state == 'idle' and not app.visited
-        app.compare()
-        app.clear_all()
+        assert app.runner is None and app.timer is None and not app.visited
+        assert old_timer not in app.tk.splitlist(app.tk.call('after', 'info'))
+        app.run()
+        app.maze()
         app.update()
-        assert app.state == 'idle' and not app.grid_model.walls
-        app.geometry('1000x740')
+        assert app.runner is None and app.timer is None and not app.route
+        assert app.grid_model.walls
+        app.geometry('900x650')
         app.update()
         assert len(app.rectangles) == 1000
+        app.run()
+        assert app.timer is not None
         assert not errors, errors
-        print('GUI smoke passed: drawing, weights, endpoints, run/pause/step, comparison, save/load, invalid load, cancellation, resize.')
+        print('GUI smoke passed: minimal controls, read-only grid, all four algorithms, cancellation, regeneration, resize and close.')
     finally:
         app.close()
 
